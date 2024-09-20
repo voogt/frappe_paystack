@@ -39,7 +39,7 @@ def get_payment_request(**kwargs):
             customer_email = sales_order.contact_email or sales_order.customer_email
             if customer_email:
                 # Prepare email content
-                email_subject = f"{item['item']} Purchase"
+                email_subject = f"Course Enrollment"
                 email_message = f"""
                 Dear {sales_order.customer_name},
 
@@ -47,7 +47,7 @@ def get_payment_request(**kwargs):
                 """
                 for item in matching_moodle_items:
                     email_message += f"\n- Link: {item.get('course_link', 'No link available')}, "
-                    email_message += f"\n- Course enrollment Key: {item.get('enrollment_key', 'No Key available')}, "
+                    email_message += f"\n- Course enrollment Key: {item.get('enrollment_key', 'No Key available')} "
                 
                 email_message += "\n\nThank you for your purchase!"
                 
@@ -80,11 +80,12 @@ def get_payment_request(**kwargs):
                     'gateway': payment_request.payment_gateway,
     	    	}
             )
+        
         else:
             frappe.throw('Only Inward payment allowed.')
     except Exception as e:
         frappe.log_error(str(e), 'Paystack')
-        frappe.throw('Invalid Payment')
+        frappe.throw(f'Invalid Payment error {e}')
 
 
 @frappe.whitelist(allow_guest=True)
