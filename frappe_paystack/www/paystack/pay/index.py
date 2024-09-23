@@ -184,6 +184,54 @@ def webhook(**kwargs):
             payment_request.run_method("on_payment_authorized", 'Completed')
             integration_request.db_set('status', 'Completed')
             frappe.db.commit()
+
+            if data.status == 'success':
+
+                sales_order = frappe.get_doc(metadata.reference_doctype, metadata.reference_name)
+                
+                # Extract item names from the Sales Order
+                sales_order_item_names = [item.item_code for item in sales_order.items]
+                print(f"Items from Sales Order (item_name): {sales_order_item_names}")
+
+                moodle_items_debug = frappe.get_all("Moodle Course Settings")
+                print(f"Full Moodle Course Settings Debug: {moodle_items_debug}")
+                
+                # Fetch items from Moodle Course Settings by item_name
+                moodle_items = frappe.get_all("Moodle Course Settings", fields=["item", "enrollment_key", "course_link"])
+                moodle_item_names = [moodle_item['item'] for moodle_item in moodle_items]  # Assuming 'item' refers to the item_name
+                print(f"Moodle Items (item_name): {moodle_item_names}")
+
+                # Find common items between Sales Order and Moodle Course Settings by item_name
+                matching_moodle_items = [
+                    item for item in moodle_items if item['item'] in sales_order_item_names
+                ]
+                print(f"Matching Moodle Items (item_name): {matching_moodle_items}")
+
+                if matching_moodle_items:
+                    customer_email = sales_order.contact_email or sales_order.customer_email
+                    if customer_email:
+                        # Prepare email content
+                        email_subject = f"Course Enrollment"
+                        email_message = f"""
+                        Dear {sales_order.customer_name},
+
+                        Please find the details for accessing your course below:
+                        """
+                        for item in matching_moodle_items:
+                            email_message += f"\n- Link: {item.get('course_link', 'No link available')}, "
+                            email_message += f"\n- Course enrollment Key: {item.get('enrollment_key', 'No Key available')} "
+                        
+                        email_message += "\n\nThank you for your purchase!"
+                        
+                        # Send the email
+                        frappe.sendmail(
+                            recipients=[customer_email],
+                            subject=email_subject,
+                            message=email_message
+                        )
+                        frappe.log(f"Email sent to {customer_email} regarding matching Moodle items.")
+                    else:
+                        frappe.log_error('No customer email found for Sales Order', 'Email Error')
         else:
             # log error
             frappe.log_error(str(req.reason), 'Verify Transaction')
