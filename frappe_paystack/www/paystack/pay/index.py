@@ -86,14 +86,11 @@ def queue_verify_transaction(transaction):
 
                 if data.status == 'success':
 
-                    if metadata.reference_doctype == "Sales Order":
-                        sales_order = frappe.get_doc(metadata.reference_doctype, payment_request.metadata)
-                        
-                        # Extract item names from the Sales Order
-                        sales_order_item_names = [item.item_code for item in sales_order.items]
-                        print(f"Items from Sales Order (item_name): {sales_order_item_names}")
-                    else:
-                        frappe.throw(f"Unsupported reference doctype: {metadata.reference_doctype}")
+                    sales_order = frappe.get_doc(metadata.reference_doctype, metadata.reference_name)
+                    
+                    # Extract item names from the Sales Order
+                    sales_order_item_names = [item.item_code for item in sales_order.items]
+                    print(f"Items from Sales Order (item_name): {sales_order_item_names}")
 
                     moodle_items_debug = frappe.get_all("Moodle Course Settings")
                     print(f"Full Moodle Course Settings Debug: {moodle_items_debug}")
