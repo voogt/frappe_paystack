@@ -218,8 +218,9 @@ def webhook(**kwargs):
                         Please find the details for accessing your course below:
                         """
                         for item in matching_moodle_items:
-                            email_message += f"\n- Link: {item.get('course_link', 'No link available')}, "
-                            email_message += f"\n- Course enrollment Key: {item.get('enrollment_key', 'No Key available')} "
+                            email_message += f"""- Link: {item.get('course_link', 'No link available')}
+                                                    -Course enrollment Key: {item.get('enrollment_key', 'No Key available')}
+                                                     """
                         
                         email_message += "\n\nThank you for your purchase!"
                         
