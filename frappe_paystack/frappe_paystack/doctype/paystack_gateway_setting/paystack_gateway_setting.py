@@ -45,6 +45,45 @@ class PaystackGatewaySetting(Document):
 		return self.supported_currencies
 	
 	def get_payment_url(self, **kwargs):
-		return get_url(f"./paystack_checkout?{urlencode(kwargs)}")
+		"""
+		Create a Paystack Payment Log and return the payment checkout URL.
+		Called by Payment Request with parameters like:
+		- amount, currency, title, description
+		- reference_doctype, reference_docname
+		- payer_email, payer_name, order_id
+		"""
+		# Extract parameters
+		amount = kwargs.get("amount", 0)
+		currency = kwargs.get("currency", "NGN")
+		reference_doctype = kwargs.get("reference_doctype")
+		reference_docname = kwargs.get("reference_docname")
+		
+		# Get the Payment Request to extract the actual order details
+		if reference_doctype == "Payment Request" and reference_docname:
+			payment_request = frappe.get_doc(reference_doctype, reference_docname)
+			# Get the actual order/invoice being paid
+			order_doctype = payment_request.reference_doctype
+			order_docname = payment_request.reference_name
+			
+			# Get the order document to extract company
+			if frappe.db.exists(order_doctype, order_docname):
+				order_doc = frappe.get_doc(order_doctype, order_docname)
+				
+				# Create Paystack Payment Log
+				log = frappe.new_doc("Paystack Payment Log")
+				log.company = getattr(order_doc, "company", self.company)
+				log.linked_doctype = order_doctype
+				log.linked_docname = order_docname
+				log.amount = amount
+				log.currency = currency
+				log.status = "Pending"
+				log.insert(ignore_permissions=True)
+				frappe.db.commit()
+				
+				# Return the payment link
+				return log.get_payment_link()
+		
+		# Fallback to old behavior if we can't create a log
+		return get_url(f"./paystack-checkout?{urlencode(kwargs)}")
 
 
