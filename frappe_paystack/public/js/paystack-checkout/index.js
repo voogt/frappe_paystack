@@ -34,21 +34,47 @@ createApp({
                 alert('Payment Terminated.');
             },
             callback: function(response){
-                console.log(response)
-                // frappe.call({
-                //     type: "POST",
-                //     method: "frappe_paystack.api.paystack_callback",
-                //     args:response,
-                //     callback: function(r) {
-                        
-                //     }
-                // });
+                frappe.call({
+                    type: "POST",
+                    method: "frappe_paystack.api.fecthCustomerAndItemDetails",
+                    args:{customer_name: doc.customer, sales_order: doc.reference_docname}
+                }).then(res => {
+                    if(res.message.auto_enroll){
+                        frappe.call({
+                        method: 'frappe_paystack.api.register_and_enrol_moodle_user',
+                        args: {
+                            first_name: res.message.customer.first_name,
+                            last_name: res.message.customer.last_name,
+                            email: doc.email,
+                            course_items: res.message.items
+                        }
+                        }).then(r => {
+                            Swal.fire({
+                                title: "Enrolment Successful",
+                                text: "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
+                                icon: "success"
+                            })
+                        }).catch(err => {
+                            try {
+                                Swal.fire({
+                                    title: "Enrolment Failed",
+                                    text: (err && err.message) || "An error occurred while enrolling.",
+                                    icon: "error"
+                                })
+                            } catch (_) {}
+                        })
+                    }
+                    else{
+                        Swal.fire(
+                            'Successful',
+                            'Your payment was successful, we will issue you receipt shortly.',
+                            'success'
+                        )
+                    }
+                }).catch(err => {
+                    
+                });
                 $('#paymentBTN').hide();
-                Swal.fire(
-                    'Successful',
-                    'Your payment was successful, we will issue you receipt shortly.',
-                    'success'
-                )
             }
         });
 

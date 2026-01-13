@@ -3,6 +3,7 @@ import frappe, hmac, hashlib, json
 from frappe_paystack.utils import (
     resolve_paystack_settings, is_paystack_enabled, coalesce_currency, resolve_paystack_settings
 )
+from .utils import register_user_and_enrol
 
 LOG_DOCTYPE = "Paystack Payment Log"
 
@@ -104,3 +105,56 @@ def validate_payment_link(docname):
         doc = frappe.get_doc(LOG_DOCTYPE, docname).get_data()
         return doc
     return {}
+
+@frappe.whitelist(allow_guest=True)
+def fecthCustomerAndItemDetails(customer_name, sales_order):
+    user = frappe.session.user 
+    user_doc = frappe.get_doc("User", user)
+    first_name = user_doc.first_name
+    last_name = user_doc.last_name
+
+    sales_order = frappe.get_doc("Sales Order", sales_order)
+    items = sales_order.items
+    auto_enroll = False
+    final_items = []
+    for item in items:
+        item_data = frappe.get_doc("Item", item.item_code)
+        if item_data.get("custom_auto_enroll_in_moodle") == 1:
+            auto_enroll = True
+            final_items.append({
+                "custom_auto_enroll_in_moodle": item_data.get("custom_auto_enroll_in_moodle"),
+                "custom_moodle_course_id": item_data.get("custom_moodle_course_id"),
+                "custom_moodle_web_token": item_data.get("custom_moodle_web_token"),
+                "item_name": item.item_name,
+            })
+
+    return {
+        "customer": {
+            "first_name": first_name,
+            "last_name": last_name,
+        },
+        "items": final_items,
+        "auto_enroll": auto_enroll
+    }
+
+@frappe.whitelist(allow_guest=True)
+def register_and_enrol_moodle_user(first_name=None, last_name=None, email=None, course_items=None):
+
+    json_data = json.loads(course_items)
+
+    for item in json_data:
+        print("ITEM:", item)
+        moodle_url = "https://training.kartoza.com"
+        token = item["custom_moodle_web_token"]
+        course_id = item["custom_moodle_course_id"]
+
+        register_user_and_enrol(
+            moodle_url,
+            token,
+            email,
+            first_name,
+            last_name,
+            course_id
+        )
+
+    return {"status": "ok"}

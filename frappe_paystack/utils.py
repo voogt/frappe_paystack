@@ -4,6 +4,7 @@ from frappe import _
 from typing import Any, Dict, Optional, Tuple
 from frappe.utils import flt, now_datetime
 from frappe.model.document import Document
+import requests
 
 SUPPORTED_CURRENCIES = ["NGN", "USD", "GHS", "ZAR", "KES"]
 
@@ -227,3 +228,113 @@ def validate_payment(doc):
         frappe.throw(f"Paystack is not enabled for company {doc.company}")
     
     return data
+
+### MOODLE REGISTRATION HELPERS ###
+
+def moodle_request(moodle_url, token, function, params):
+    """Call Moodle REST API"""
+    url = f"{moodle_url}/webservice/rest/server.php"
+    payload = {
+        "wstoken": token,
+        "wsfunction": function,
+        "moodlewsrestformat": "json",
+        **params
+    }
+
+    response = requests.post(url, data=payload)
+    response.raise_for_status()
+
+    data = response.json()
+    if isinstance(data, dict) and data.get("exception"):
+        raise RuntimeError(f"Moodle error: {data['message']}")
+
+    return data
+
+
+def get_user_by_email(moodle_url, token, email):
+    result = moodle_request(
+        moodle_url,
+        token,
+        "core_user_get_users",
+        {
+            "criteria[0][key]": "email",
+            "criteria[0][value]": email
+        }
+    )
+    users = result.get("users", [])
+    return users[0] if users else None
+
+
+def create_user(moodle_url, token, email, firstname, lastname):
+    username = email.split("@")[0]
+
+    result = moodle_request(
+        moodle_url,
+        token,
+        "core_user_create_users",
+        {
+            "users[0][username]": username,
+            "users[0][email]": email,
+            "users[0][firstname]": firstname,
+            "users[0][lastname]": lastname,
+            "users[0][auth]": "manual",
+            "users[0][createpassword]": 1
+        }
+    )
+    return result[0]["id"]
+
+
+def enrol_user(
+    moodle_url,
+    token,
+    user_id,
+    course_id,
+    role_id=5
+):
+    moodle_request(
+        moodle_url,
+        token,
+        "enrol_manual_enrol_users",
+        {
+            "enrolments[0][roleid]": role_id,
+            "enrolments[0][userid]": user_id,
+            "enrolments[0][courseid]": course_id
+        }
+    )
+
+
+def register_user_and_enrol(
+    moodle_url,
+    token,
+    email,
+    firstname,
+    lastname,
+    course_id,
+    role_id=5
+):
+    user = get_user_by_email(moodle_url, token, email)
+    isNewUser = False
+
+    if user:
+        print(f"User already exists: {email}")
+        user_id = user["id"]
+    else:
+        print(f"Creating user: {email}")
+        user_id = create_user(
+            moodle_url,
+            token,
+            email,
+            firstname,
+            lastname
+        )
+        isNewUser = True
+
+    enrol_user(
+        moodle_url,
+        token,
+        user_id,
+        course_id,
+        role_id
+    )
+
+    return {"isNewUser": isNewUser, "user_id": user_id}
