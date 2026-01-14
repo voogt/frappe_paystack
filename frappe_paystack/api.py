@@ -126,6 +126,7 @@ def fecthCustomerAndItemDetails(customer_name, sales_order):
                 "custom_moodle_course_id": item_data.get("custom_moodle_course_id"),
                 "custom_moodle_web_token": item_data.get("custom_moodle_web_token"),
                 "item_name": item.item_name,
+                "item_qty": item.qty
             })
 
     return {
@@ -138,26 +139,31 @@ def fecthCustomerAndItemDetails(customer_name, sales_order):
     }
 
 @frappe.whitelist(allow_guest=True)
-def register_and_enrol_moodle_user(first_name=None, last_name=None, email=None, course_items=None):
+def get_current_user_email():
+    return {"email": frappe.session.user}
+
+@frappe.whitelist(allow_guest=True)
+def register_and_enrol_moodle_user(attendees=None):
 
     try:
-        json_data = json.loads(course_items)
+        json_attendees = json.loads(attendees)
+        print("ATTENDEES",json_attendees)
 
-        for item in json_data:
+        for item in json_attendees:
             moodle_url = "https://training.kartoza.com"
-            token = item["custom_moodle_web_token"]
-            course_id = item["custom_moodle_course_id"]
+            token = item["web_token"]
+            course_id = item["course_id"]
 
             register_user_and_enrol(
                 moodle_url,
                 token,
-                email,
-                first_name,
-                last_name,
+                item["email"],
+                item["first_name"],
+                item["last_name"],
                 course_id
             )
 
-        return {"status": "ok"}
+        return {"status": "ok", "message": "User(s) registered and enrolled successfully. Users will receive an email from Moodle with login credentials if no account is registered on https://training.kartoza.com/."}
     except Exception as e:
         frappe.log_error(str(e), "register_and_enrol_moodle_user error")
         return {"status": "error", "message": str(e)}

@@ -38,20 +38,19 @@ createApp({
                     type: "POST",
                     method: "frappe_paystack.api.fecthCustomerAndItemDetails",
                     args:{customer_name: doc.customer, sales_order: doc.reference_docname}
-                }).then(res => {
+                }).then(async res => {
                     if(res.message.auto_enroll){
+                        const attendees = await me.collectAttendees(res);
+                        console.log(attendees);
                         frappe.call({
                         method: 'frappe_paystack.api.register_and_enrol_moodle_user',
                         args: {
-                            first_name: res.message.customer.first_name,
-                            last_name: res.message.customer.last_name,
-                            email: doc.email,
-                            course_items: res.message.items
+                            attendees: attendees,
                         }
                         }).then(r => {
                             Swal.fire({
                                 title: "Enrolment Successful",
-                                text: "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
+                                text: (r && r.message) || "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
                                 icon: "success"
                             })
                         }).catch(err => {
@@ -100,31 +99,13 @@ createApp({
                     this.payWithPaystack();
                 } else {
 
-                    Swal.fire({
-                        title: "Your email",
-                        input: "text",
-                        inputAttributes: {
-                            autocapitalize: "off"
-                        },
-                        showCancelButton: false,
-                        confirmButtonText: "Continue",
-                        showLoaderOnConfirm: true,
-                        allowOutsideClick: () => !Swal.isLoading()
-                    }).then((value) => {
-                        if (value.isConfirmed) {
-                            if (isEmail(value.value)){
-                                doc.email = value.value;
-                                me.payWithPaystack();
-                            } else {
-                                Swal.fire({
-                                    title: "Invalid Email",
-                                    text: "Retry",
-                                    icon: "warning"
-                                });
-                            }
-                        }
-                        
-                    });
+                    frappe.call({
+                        method: 'frappe_paystack.api.get_current_user_email',
+                        args: {}
+                    }).then(r => {
+                        doc.email = r.message.email;
+                        me.payWithPaystack();
+                    })
                 }
             }
         })
@@ -135,8 +116,46 @@ createApp({
         } else {
             return Intl.NumberFormat('en-US').format(amount);
         }
+    },
+    async collectAttendees(res) {
+        let attendees = [];
+        for (let i = 0; i < res.message.items.length; i++) {
+            let item = res.message.items[i];
+            for (let j = 1; j <= item.item_qty; j++) {
+                const result = await Swal.fire({
+                    title: `Details for ${item.item_name} (${j}/${item.item_qty})`,
+                    html: `
+                        <input id="swal-fname" class="swal2-input" placeholder="First Name">
+                        <input id="swal-lname" class="swal2-input" placeholder="Last Name">
+                        <input id="swal-email" class="swal2-input" placeholder="Email">
+                    `,
+                    focusConfirm: false,
+                    confirmButtonText: 'Save',
+                    preConfirm: () => {
+                        const first_name = document.getElementById('swal-fname').value;
+                        const last_name = document.getElementById('swal-lname').value;
+                        const email = document.getElementById('swal-email').value;
+                        if (!first_name || !last_name || !email) {
+                            Swal.showValidationMessage('All fields are required');
+                            return false;
+                        }
+                        return { first_name, last_name, email };
+                    }
+                });
+                if (result.value) {
+                    attendees.push({
+                        item_name: item.item_name,
+                        course_id: item.custom_moodle_course_id,
+                        web_token: item.custom_moodle_web_token,
+                        ...result.value
+                    });
+                }
+            }
+        }
+        return attendees;
     }
   },
+  
   mounted(){
 
   }
