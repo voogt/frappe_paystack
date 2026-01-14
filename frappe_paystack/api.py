@@ -140,21 +140,24 @@ def fecthCustomerAndItemDetails(customer_name, sales_order):
 @frappe.whitelist(allow_guest=True)
 def register_and_enrol_moodle_user(first_name=None, last_name=None, email=None, course_items=None):
 
-    json_data = json.loads(course_items)
+    try:
+        json_data = json.loads(course_items)
 
-    for item in json_data:
-        print("ITEM:", item)
-        moodle_url = "https://training.kartoza.com"
-        token = item["custom_moodle_web_token"]
-        course_id = item["custom_moodle_course_id"]
+        for item in json_data:
+            moodle_url = "https://training.kartoza.com"
+            token = item["custom_moodle_web_token"]
+            course_id = item["custom_moodle_course_id"]
 
-        register_user_and_enrol(
-            moodle_url,
-            token,
-            email,
-            first_name,
-            last_name,
-            course_id
-        )
+            register_user_and_enrol(
+                moodle_url,
+                token,
+                email,
+                first_name,
+                last_name,
+                course_id
+            )
 
-    return {"status": "ok"}
+        return {"status": "ok"}
+    except Exception as e:
+        frappe.log_error(str(e), "register_and_enrol_moodle_user error")
+        return {"status": "error", "message": str(e)}
