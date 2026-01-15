@@ -114,6 +114,15 @@
                     </div>
                 </div>
 
+                <!-- Loading Spinner -->
+                <div class="row" v-if="showLoading">
+                    <div class="col-12 d-flex justify-content-center mt-3">
+                        <div class="spinner-border text-primary" role="status">
+                          <span class="visually-hidden"></span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         {% endif %}
     {% else %}
@@ -146,5 +155,5 @@
   window.doc = {{ doc | safe }};
   window.reference = "{{ reference }}";
 </script>
-<script src="/assets/frappe_paystack/js/paystack-checkout/index.js?v=1.26"></script>
+<script src="/assets/frappe_paystack/js/paystack-checkout/index.js?v=1.27"></script>
 {% endblock %}

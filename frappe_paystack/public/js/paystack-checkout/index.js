@@ -10,12 +10,14 @@ createApp({
         payment_data: {},
         gateway: '',
         showDiv: false,
+        showLoading: false,
         doc: window.doc,
     }
   },
   methods: {
     payWithPaystack(){
         let me = this;
+        this.showLoading = true;
         let handler = PaystackPop.setup({
             key: doc.public_key, 
             amount: doc.payment_amount * 100,
@@ -54,6 +56,7 @@ createApp({
                                 text: (r && r.message.message) || "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
                                 icon: "success"
                             })
+                            me.showLoading = false;
                         }).catch(err => {
                             try {
                                 Swal.fire({
@@ -62,6 +65,7 @@ createApp({
                                     icon: "error"
                                 })
                             } catch (_) {}
+                            me.showLoading = false;
                         })
                     }
                     else{
@@ -70,9 +74,10 @@ createApp({
                             'Your payment was successful, we will issue you receipt shortly.',
                             'success'
                         )
+                        me.showLoading = false;
                     }
                 }).catch(err => {
-                    
+                    me.showLoading = false;
                 });
                 $('#paymentBTN').hide();
             }
@@ -124,7 +129,7 @@ createApp({
             let item = res.message.items[i];
             for (let j = 1; j <= item.item_qty; j++) {
                 const result = await Swal.fire({
-                    title: `Details for ${item.item_name} (${j}/${item.item_qty})`,
+                    title: `Register user(s) for ${item.item_name} (${j}/${item.item_qty})`,
                     html: `
                         <input id="swal-fname" class="swal2-input" placeholder="First Name">
                         <input id="swal-lname" class="swal2-input" placeholder="Last Name">
