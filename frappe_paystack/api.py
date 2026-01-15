@@ -163,7 +163,7 @@ def register_and_enrol_moodle_user(attendees=None):
                 course_id
             )
 
-        return {"status": "ok", "message": "User(s) registered and enrolled successfully. Users will receive an email from Moodle with login credentials if no account is registered on https://training.kartoza.com/."}
+        return {"status": "ok", "message": "User(s) registered and enrolled successfully. Users will receive an email with login credentials if no account is registered on https://training.kartoza.com/."}
     except Exception as e:
         frappe.log_error(str(e), "register_and_enrol_moodle_user error")
         return {"status": "error", "message": str(e)}

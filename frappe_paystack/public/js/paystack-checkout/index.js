@@ -48,9 +48,10 @@ createApp({
                             attendees: attendees,
                         }
                         }).then(r => {
+                            console.log(r);
                             Swal.fire({
                                 title: "Enrolment Successful",
-                                text: (r && r.message) || "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
+                                text: (r && r.message.message) || "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
                                 icon: "success"
                             })
                         }).catch(err => {
