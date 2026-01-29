@@ -1,9 +1,10 @@
 
-import frappe, hmac, hashlib, json
+import frappe, hmac, hashlib, json, importlib
 from frappe_paystack.utils import (
     resolve_paystack_settings, is_paystack_enabled, coalesce_currency, resolve_paystack_settings
 )
 from .utils import register_user_and_enrol
+from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
 LOG_DOCTYPE = "Paystack Payment Log"
 
@@ -76,6 +77,21 @@ def process_webhook_event(data):
         frappe.db.commit()
         if not frappe.db.get_value("Customer", metadata.get("customer"), "email_id"):
             frappe.db.set_value("Customer", metadata.get("customer"), "email_id", metadata.get("email"))
+
+        # If payment is successful and linked to a Sales Order, mark it Completed
+        try:
+            if tx.get("status") == "success":
+                # Derive the referenced document from metadata or payment log linkage
+                ref_dt = (metadata.get("reference_doctype") or getattr(log, "linked_doctype", "")) or ""
+                ref_dn = (metadata.get("reference_docname") or getattr(log, "linked_docname", "")) or ""
+                if ref_dt.lower() == "sales order" and ref_dn:
+                    # Update Sales Order status to Completed if submitted and not already terminal
+                    so_status = frappe.db.get_value("Sales Order", ref_dn, ["docstatus", "status"], as_dict=True)
+                    if so_status and so_status.docstatus == 1 and so_status.status not in ("Completed", "Cancelled", "Closed"):
+                        frappe.db.set_value("Sales Order", ref_dn, "status", "Completed")
+                        frappe.db.commit()
+        except Exception as e:
+            frappe.log_error(f"Failed to set Sales Order status to Completed: {e}", "Paystack Webhook: Sales Order Status Update")
     except Exception as e:
         frappe.log_error(str(e), "Paystack payment")
 
@@ -101,10 +117,13 @@ def create_payment_link(doctype, docname, amount: float=None, currency: str=None
 
 @frappe.whitelist(allow_guest=True)
 def validate_payment_link(docname):
-    if frappe.db.exists(LOG_DOCTYPE, docname):
-        doc = frappe.get_doc(LOG_DOCTYPE, docname).get_data()
-        return doc
-    return {}
+    if not frappe.db.exists(LOG_DOCTYPE, docname):
+        return {}
+
+    # Fetch the original Paystack Payment Log doc (object + data dict)
+    log_doc = frappe.get_doc(LOG_DOCTYPE, docname)
+    data = log_doc.get_data()
+    return data
 
 @frappe.whitelist(allow_guest=True)
 def fecthCustomerAndItemDetails(customer_name, sales_order):
@@ -128,6 +147,27 @@ def fecthCustomerAndItemDetails(customer_name, sales_order):
                 "item_name": item.item_name,
                 "item_qty": item.qty
             })
+
+    #Create sales invoice and mark both SO & SI as Paid
+
+    try:
+        sales_invoice = make_sales_invoice(sales_order.name, ignore_permissions=True)
+        sales_invoice.submit()
+
+        # Explicitly set statuses to Paid
+        try:
+            frappe.db.set_value("Sales Invoice", sales_invoice.name, "status", "Paid")
+            frappe.db.commit()
+        except Exception as e:
+            frappe.log_error(f"Failed to set Sales Invoice status to Paid: {e}", "Paystack: Set SI Paid")
+
+        try:
+            frappe.db.set_value("Sales Order", sales_order.name, "status", "Closed")
+            frappe.db.commit()
+        except Exception as e:
+            frappe.log_error(f"Failed to set Sales Order status to Closed: {e}", "Paystack: Set SO Closed")
+    except Exception as e:
+        print("Error creating Sales Invoice:", str(e))
 
     return {
         "customer": {
