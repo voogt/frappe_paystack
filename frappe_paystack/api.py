@@ -163,6 +163,7 @@ def fecthCustomerAndItemDetails(customer_name, sales_order):
 
         try:
             frappe.db.set_value("Sales Order", sales_order.name, "status", "Closed")
+            frappe.db.set_value("Sales Order", sales_order.name, "per_billed", "100")
             frappe.db.commit()
         except Exception as e:
             frappe.log_error(f"Failed to set Sales Order status to Closed: {e}", "Paystack: Set SO Closed")
@@ -183,27 +184,48 @@ def get_current_user_email():
     return {"email": frappe.session.user}
 
 @frappe.whitelist(allow_guest=True)
-def register_and_enrol_moodle_user(attendees=None):
+def register_and_enrol_moodle_user(attendees=None, sales_order=None):
 
-    try:
-        json_attendees = json.loads(attendees)
-        print("ATTENDEES",json_attendees)
+    json_attendees = json.loads(attendees)
+    # sales_order is now expected to be a plain string (docname), not JSON
+    print(f"Sales Order: {sales_order}")
+    is_successful = True
 
-        for item in json_attendees:
-            moodle_url = "https://training.kartoza.com"
-            token = item["web_token"]
-            course_id = item["course_id"]
+    log = frappe.get_doc({
+        "doctype": "Moodle Enrollment Logs",
+        "sales_order": sales_order,
+    })
 
-            register_user_and_enrol(
-                moodle_url,
-                token,
-                item["email"],
-                item["first_name"],
-                item["last_name"],
-                course_id
-            )
+    log.insert(ignore_permissions=True)
 
+    for item in json_attendees:
+        moodle_url = "https://training.kartoza.com"
+        token = item["web_token"]
+        course_id = item["course_id"]
+        
+
+        response = register_user_and_enrol(
+            moodle_url,
+            token,
+            item["email"],
+            item["first_name"],
+            item["last_name"],
+            course_id
+        )
+
+        log.append("table_details", {
+            "name1": f"{item['first_name']} {item['last_name']}",
+            "email": item["email"],
+            "course_id": course_id,
+            "enrollment_succesful": response["enrollment_succesful"],
+        })
+
+        log.save(ignore_permissions=True)
+
+        if response["enrollment_succesful"] == False:
+            is_successful = False
+
+    if is_successful:
         return {"status": "ok", "message": "User(s) registered and enrolled successfully. You will receive an email with login credentials if no account is registered on https://training.kartoza.com/."}
-    except Exception as e:
-        frappe.log_error(str(e), "register_and_enrol_moodle_user error")
-        return {"status": "error", "message": str(e)}
+    else:
+        return {"status": "error", "message": "There was an error enrolling the user(s). Please contact support."}

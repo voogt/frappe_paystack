@@ -43,11 +43,12 @@ createApp({
                 }).then(async res => {
                     if(res.message.auto_enroll){
                         const attendees = await me.collectAttendees(res);
-                        console.log(attendees);
+                        console.log(doc.reference_docname);
                         frappe.call({
                         method: 'frappe_paystack.api.register_and_enrol_moodle_user',
                         args: {
-                            attendees: attendees,
+                            "attendees": attendees,
+                            "sales_order": doc.reference_docname,
                         }
                         }).then(r => {
                             console.log(r);
@@ -55,7 +56,9 @@ createApp({
                                 title: "Enrolment Successful",
                                 text: (r && r.message.message) || "Please use email " + doc.email + " to login into https://training.kartoza.com/my/courses.php.",
                                 icon: "success"
-                            })
+                            }).then(() => {
+                                window.location.href = '/invoices';
+                            });
                             me.showLoading = false;
                         }).catch(err => {
                             try {

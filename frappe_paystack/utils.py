@@ -310,31 +310,35 @@ def register_user_and_enrol(
     firstname,
     lastname,
     course_id,
-    role_id=5
+    role_id=5,
 ):
     user = get_user_by_email(moodle_url, token, email)
-    isNewUser = False
+    enrollment_succesful = False
 
-    if user:
-        print(f"User already exists: {email}")
-        user_id = user["id"]
-    else:
-        print(f"Creating user: {email}")
-        user_id = create_user(
+    try:
+        if user:
+            user_id = user["id"]
+        else:
+            user_id = create_user(
+                moodle_url,
+                token,
+                email,
+                firstname,
+                lastname
+            )
+
+        enrol_user(
             moodle_url,
             token,
-            email,
-            firstname,
-            lastname
+            user_id,
+            course_id,
+            role_id
         )
-        isNewUser = True
+        enrollment_succesful = True
 
-    enrol_user(
-        moodle_url,
-        token,
-        user_id,
-        course_id,
-        role_id
-    )
+    except Exception as e:
+        enrollment_succesful = False
+        frappe.log_error(f"Moodle enrollment failed for {email}: {e}", "Paystack: Moodle Enrollment")
 
-    return {"isNewUser": isNewUser, "user_id": user_id}
+
+    return {"user_id": user_id, "enrollment_succesful": enrollment_succesful}
