@@ -191,20 +191,23 @@ def register_and_enrol_moodle_user(attendees=None, sales_order=None):
     print(f"Sales Order: {sales_order}")
     is_successful = True
 
-    # Get course_id and token from sales_order items
+    # Get all courses with course_id and token from sales_order items
     sales_order_doc = frappe.get_doc("Sales Order", sales_order)
-    course_id = None
-    token = None
+    courses = []
 
     for item in sales_order_doc.items:
         item_data = frappe.get_doc("Item", item.item_code)
         if item_data.get("custom_auto_enroll_in_moodle") == 1:
             course_id = item_data.get("custom_moodle_course_id")
             token = item_data.get("custom_moodle_web_token")
-            break  # Assuming one course per sales order
+            if course_id and token:
+                courses.append({
+                    "course_id": course_id,
+                    "token": token
+                })
 
-    if not course_id or not token:
-        return {"status": "error", "message": "Course ID or Web Token not found in Sales Order items."}
+    if not courses:
+        return {"status": "error", "message": "No courses with auto-enroll found in Sales Order items."}
 
     log = frappe.get_doc({
         "doctype": "Moodle Enrollment Logs",
@@ -213,29 +216,31 @@ def register_and_enrol_moodle_user(attendees=None, sales_order=None):
 
     log.insert(ignore_permissions=True)
 
+    # Enroll each attendee in all courses
     for attendee in json_attendees:
-        moodle_url = "https://training.kartoza.com"
+        for course in courses:
+            moodle_url = "https://training.kartoza.com"
 
-        response = register_user_and_enrol(
-            moodle_url,
-            token,
-            attendee["email"],
-            attendee["first_name"],
-            attendee["last_name"],
-            course_id
-        )
+            response = register_user_and_enrol(
+                moodle_url,
+                course["token"],
+                attendee["email"],
+                attendee["first_name"],
+                attendee["last_name"],
+                course["course_id"]
+            )
 
-        log.append("table_details", {
-            "name1": f"{attendee['first_name']} {attendee['last_name']}",
-            "email": attendee["email"],
-            "course_id": course_id,
-            "enrollment_succesful": response["enrollment_succesful"],
-        })
+            log.append("table_details", {
+                "name1": f"{attendee['first_name']} {attendee['last_name']}",
+                "email": attendee["email"],
+                "course_id": course["course_id"],
+                "enrollment_succesful": response["enrollment_succesful"],
+            })
 
-        log.save(ignore_permissions=True)
+            log.save(ignore_permissions=True)
 
-        if response["enrollment_succesful"] == False:
-            is_successful = False
+            if response["enrollment_succesful"] == False:
+                is_successful = False
 
     if is_successful:
         return {"status": "ok", "message": "User(s) registered and enrolled successfully. You will receive an email with login credentials if no account is registered on https://training.kartoza.com/."}
