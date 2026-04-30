@@ -191,6 +191,21 @@ def register_and_enrol_moodle_user(attendees=None, sales_order=None):
     print(f"Sales Order: {sales_order}")
     is_successful = True
 
+    # Get course_id and token from sales_order items
+    sales_order_doc = frappe.get_doc("Sales Order", sales_order)
+    course_id = None
+    token = None
+
+    for item in sales_order_doc.items:
+        item_data = frappe.get_doc("Item", item.item_code)
+        if item_data.get("custom_auto_enroll_in_moodle") == 1:
+            course_id = item_data.get("custom_moodle_course_id")
+            token = item_data.get("custom_moodle_web_token")
+            break  # Assuming one course per sales order
+
+    if not course_id or not token:
+        return {"status": "error", "message": "Course ID or Web Token not found in Sales Order items."}
+
     log = frappe.get_doc({
         "doctype": "Moodle Enrollment Logs",
         "sales_order": sales_order,
@@ -198,24 +213,21 @@ def register_and_enrol_moodle_user(attendees=None, sales_order=None):
 
     log.insert(ignore_permissions=True)
 
-    for item in json_attendees:
+    for attendee in json_attendees:
         moodle_url = "https://training.kartoza.com"
-        token = item["web_token"]
-        course_id = item["course_id"]
-        
 
         response = register_user_and_enrol(
             moodle_url,
             token,
-            item["email"],
-            item["first_name"],
-            item["last_name"],
+            attendee["email"],
+            attendee["first_name"],
+            attendee["last_name"],
             course_id
         )
 
         log.append("table_details", {
-            "name1": f"{item['first_name']} {item['last_name']}",
-            "email": item["email"],
+            "name1": f"{attendee['first_name']} {attendee['last_name']}",
+            "email": attendee["email"],
             "course_id": course_id,
             "enrollment_succesful": response["enrollment_succesful"],
         })
