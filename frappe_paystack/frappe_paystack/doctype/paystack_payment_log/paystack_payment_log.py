@@ -61,6 +61,9 @@ class PaystackPaymentLog(Document):
         If this log references a Sales Invoice and status is Processed/Completed,
         attempt to clear the invoice by creating a Payment Entry (partial or full).
         We keep this conservative: if currencies mismatch or amount is zero, skip.
+        Skipped entirely when the gateway's "Capture Payment Entries Automatically"
+        setting is disabled, leaving the invoice Unpaid until a Payment Entry is
+        created manually once Paystack pays out to the bank account.
         """
         
         if not (self.linked_doctype == self.linked_doctype and self.linked_docname):
@@ -80,14 +83,20 @@ class PaystackPaymentLog(Document):
                 if self.status != "Completed":
                     self.db_set("status", "Completed", update_modified=True)
                 return
-        
+
+        gateway_settings = self.get_payment_public_key()
+        if not (gateway_settings and gateway_settings.get("capture_payment_entries_automatically")):
+            # Funds are still held by Paystack. Leave the invoice Unpaid and
+            # the log as Processed until a Payment Entry is created manually
+            # once the payout reaches the bank account.
+            return
 
         paid_amount = round(self.amount_paid/inv.conversion_rate, 2)
         if paid_amount <= 0:
             return
         try:
             frappe.set_user("administrator")
-            GATE_WAY_SETTINGS = self.get_payment_public_key()
+            GATE_WAY_SETTINGS = gateway_settings
             pe = frappe.new_doc("Payment Entry")
             pe.payment_type = "Receive"
             pe.company = inv.company
@@ -136,6 +145,7 @@ class PaystackPaymentLog(Document):
                 "currency": doc.currency,
                 "suspense_account": doc.suspense_account,
                 "mode_of_payment": doc.mode_of_payment,
+                "capture_payment_entries_automatically": doc.capture_payment_entries_automatically,
             }
         else:
             key = None

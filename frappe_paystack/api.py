@@ -1,7 +1,8 @@
 
 import frappe, hmac, hashlib, json, importlib
 from frappe_paystack.utils import (
-    resolve_paystack_settings, is_paystack_enabled, coalesce_currency, resolve_paystack_settings
+    resolve_paystack_settings, is_paystack_enabled, coalesce_currency, resolve_paystack_settings,
+    should_capture_payment_entries_automatically
 )
 from .utils import register_user_and_enrol
 from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
@@ -148,18 +149,28 @@ def fecthCustomerAndItemDetails(customer_name, sales_order):
                 "item_qty": item.qty
             })
 
-    #Create sales invoice and mark both SO & SI as Paid
+    #Create sales invoice and mark both SO & SI as Paid, unless the gateway is
+    #configured to capture Payment Entries manually once Paystack pays out.
 
     try:
         sales_invoice = make_sales_invoice(sales_order.name, ignore_permissions=True)
         sales_invoice.submit()
 
-        # Explicitly set statuses to Paid
-        try:
-            frappe.db.set_value("Sales Invoice", sales_invoice.name, "status", "Paid")
-            frappe.db.commit()
-        except Exception as e:
-            frappe.log_error(f"Failed to set Sales Invoice status to Paid: {e}", "Paystack: Set SI Paid")
+        if should_capture_payment_entries_automatically(sales_order.company):
+            # Explicitly set statuses to Paid
+            try:
+                frappe.db.set_value("Sales Invoice", sales_invoice.name, "status", "Paid")
+                frappe.db.commit()
+            except Exception as e:
+                frappe.log_error(f"Failed to set Sales Invoice status to Paid: {e}", "Paystack: Set SI Paid")
+        else:
+            # Funds are still held by Paystack. Leave the invoice Unpaid until a
+            # Payment Entry is created manually once the payout reaches the bank.
+            try:
+                frappe.db.set_value("Sales Invoice", sales_invoice.name, "status", "Unpaid")
+                frappe.db.commit()
+            except Exception as e:
+                frappe.log_error(f"Failed to set Sales Invoice status to Unpaid: {e}", "Paystack: Set SI Unpaid")
 
         try:
             frappe.db.set_value("Sales Order", sales_order.name, "status", "Closed")

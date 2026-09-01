@@ -82,6 +82,7 @@ def _get_company_row_settings(company: Optional[str]) -> Optional[Dict[str, Any]
         "paystack_fee_account": None,
         "wallet_clearing_account": None,
         "default_bank_account": None,
+        "capture_payment_entries_automatically": row.get("capture_payment_entries_automatically", 1),
     }
 
 
@@ -94,6 +95,18 @@ def resolve_paystack_settings(company: Optional[str]) -> Optional[Dict[str, Any]
 
 def is_paystack_enabled(company: Optional[str]) -> bool:
     return bool(resolve_paystack_settings(company))
+
+
+def should_capture_payment_entries_automatically(company: Optional[str]) -> bool:
+    """
+    Whether Payment Entries for this company's Paystack payments should be
+    created automatically. Defaults to True (matching the field default) when
+    no enabled gateway setting is found for the company.
+    """
+    settings = resolve_paystack_settings(company)
+    if settings is None:
+        return True
+    return bool(settings.get("capture_payment_entries_automatically", 1))
 
 def hmac_sha512(payload: bytes, secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), payload, hashlib.sha512).hexdigest()
